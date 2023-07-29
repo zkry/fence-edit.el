@@ -85,6 +85,11 @@ that list, the `fence-edit-default-mode' will be used."
            (choice (integer "Capture group number")
                    (symbol "Language name")))))
 
+(defcustom fence-temp-file
+  nil
+  "If non-nil, create a temporary file for the edit buffer."
+  :group 'fence-edit)
+
 (defconst fence-edit-window-layout 48529384
   "Register in which to save the window layout.
 
@@ -204,6 +209,10 @@ Return nil if no block is found."
               (when (and end (>= end pos))
                 (throw 'exit `(,start ,end ,lang))))))))))
 
+(defun fence-edit--get-extension-for-lang (lang)
+  "Try to get the file extension name for LANG."
+  lang)
+
 (defun fence-edit--get-mode-for-lang (lang)
   "Try to get a mode function from language name LANG.
 
@@ -271,7 +280,8 @@ pick."
             mode (fence-edit--get-mode-for-lang lang)
             ovl (make-overlay beg end)
             edit-buffer (generate-new-buffer
-                         (fence-edit--make-edit-buffer-name (buffer-name) lang)))
+                         (fence-edit--make-edit-buffer-name (buffer-name) lang))
+            parent-file-name (buffer-file-name))
       (window-configuration-to-register fence-edit-window-layout)
       (if (string-match-p (rx "\n" string-end) code)
           (setq code (replace-regexp-in-string (rx "\n" string-end) "" code)))
@@ -283,6 +293,12 @@ pick."
       (overlay-put ovl 'face 'secondary-selection)
       (overlay-put ovl :read-only "Please don't.")
       (switch-to-buffer-other-window edit-buffer t)
+      (when fence-temp-file
+        (let* ((ext (fence-edit--get-extension-for-lang lang))
+               (dir (file-name-directory parent-file-name))
+               (file-name (format "%stmp-%d.%s" dir (random 1000) ext)))
+          (setq buffer-file-name file-name)
+          (save-buffer)))
       (insert code)
       (remove-text-properties (point-min) (point-max)
                               '(display nil invisible nil intangible nil))
@@ -344,6 +360,8 @@ The edit buffer is expected to be the current buffer."
     (switch-to-buffer-other-window dest-buffer)
     (jump-to-register fence-edit-window-layout)
     (with-current-buffer buffer
+      (when fence-temp-file
+        (delete-file (buffer-file-name) nil))
       (set-buffer-modified-p nil))
     (kill-buffer buffer)))
 
